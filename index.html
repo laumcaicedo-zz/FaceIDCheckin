@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.283.1.min.js"></script>
+  </head>
+  <body>
+
+  
+    <h1>Demo</h1>
+    <div id="app"></div>
+
+    <script>
+var BucketName = 'faceindexluiscaro';
+var bucketRegion = 'us-east-1';
+var IdentityPoolId = 'us-east-1:f5817b0a-be68-4f87-8a52-a0bea05ab6d5';
+var facetable = 'bintech'
+var threshold = 0
+
+AWS.config.update({
+  region: bucketRegion,
+  credentials: new AWS.CognitoIdentityCredentials({
+    IdentityPoolId: IdentityPoolId
+  })
+});
+
+var s3 = new AWS.S3({
+  params: {Bucket: BucketName}
+});   
+
+var rekognition = new AWS.Rekognition();
+var dynamodb = new AWS.DynamoDB();
+
+
+function makeid() {
+  var text = "";
+  var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+  for (var i = 0; i < 10; i++)
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+
+  return text;
+}
+
+function uuidv4() {
+  return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+    (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+  )
+}
+
+function addPhoto() {
+  var files = document.getElementById('photoupload').files;
+  var name = document.getElementById('name').value;
+  console.log(name)
+  if (!files.length) {
+    return alert('Please choose a file to upload first.');
+  }
+  var file = files[0];
+  var fileName = file.name;
+  var photoKey = "index/"+ uuidv4() + fileName;
+  s3.upload({
+    Key: photoKey,
+    Body: file,
+    ACL: 'private',
+    Metadata: {'fullname':name}
+  }, function(err, data) {
+    if (err) {
+      return alert('Tuvimos un error cargando tu foto');
+    }
+    alert('Tu foto ha sido cargada con exito.');
+  });
+}
+
+function checkPhoto() {
+  var files = document.getElementById('photouploadcheck').files;
+  console.log(name)
+  if (!files.length) {
+    return alert('Please choose a file to upload first.');
+  }
+  var file = files[0];
+  var fileName = file.name;
+  var photoKey = "check/"+ uuidv4() + fileName;
+  s3.upload({
+    Key: photoKey,
+    Body: file,
+    ACL: 'private'
+  }, function(err, data) {
+    if (err) {
+      return alert('Tuvimos un error cargando tu foto');
+    }
+
+ var params = {
+  CollectionId: "bintechfaces", 
+  FaceMatchThreshold: threshold, 
+  Image: {
+   S3Object: {
+    Bucket: BucketName, 
+    Name: photoKey
+   }
+  }, 
+  MaxFaces: 1
+ };
+ 
+ rekognition.searchFacesByImage(params, function(err, data) {
+   if (err) {
+    console.log(err, err.stack); // an error occurred 
+  }
+   else {
+
+//    console.log(data.FaceMatches[0].Face.FaceId);           // successful response
+//    console.log(data.FaceMatches[0].Face.Confidence);
+//    console.log(data.FaceMatches[0].Similarity);
+
+ var params = {
+  Key: {
+   "RekognitionId": {
+     S: data.FaceMatches[0].Face.FaceId
+    }
+  }, 
+  TableName: "bintech"
+ };
+ dynamodb.getItem(params, function(err, datadb) {
+   if (err) {
+    console.log(err, err.stack); // an error occurred
+   } else {
+    alert(datadb.Item.FullName.S + " " + data.FaceMatches[0].Similarity);           // successful response
+   }     
+ });
+
+   }    
+ });    
+});
+
+}
+
+   var htmlTemplate = [
+      '<input class="form-control-file" id="photoupload" type="file" accept="image/*">',
+      '<input class="form-control-file" id="name" type="text">',
+      '<button id="addphoto" onclick="addPhoto()">',
+        'Add Photo',
+      '</button>',
+      '<br>',
+      '<br>',
+      '<input class="form-control-file" id="photouploadcheck" type="file" accept="image/*">',
+      '<button id="checkphoto" onclick="checkPhoto()">',
+        'Check Photo',
+      '</button>'
+
+
+    ]
+
+
+   
+   function getHtml(template) {
+      return template.join('\n');
+   }
+
+    document.getElementById('app').innerHTML = getHtml(htmlTemplate);
+    </script>    
+  </body>
+</html>
+
